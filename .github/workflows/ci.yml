@@ -36,7 +36,8 @@ jobs:
               with open(f, "r", encoding="utf-8") as fh:
                   data = json.load(fh)
               assert "panels" in data and len(data["panels"]) > 0, f"Missing panels in {f}"
-              print(f"OK JSON: {f} ({len(data[\"panels\"])} panels)")
+              count = len(data["panels"])
+              print(f"OK JSON: {f} ({count} panels)")
           '
 
       - name: Validate Docker Compose schema
