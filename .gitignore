@@ -1,0 +1,13 @@
+# Local environment & runtime data
+.env
+.env.*
+!.env.example
+data/
+*.log
+
+# OS / Editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,50 @@
+name: Observability Stack CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate YAML, JSON & Prometheus Rules
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate YAML files with Python PyYAML
+        run: |
+          python3 -c '
+          import glob, sys, yaml
+          files = glob.glob("**/*.yml", recursive=True) + glob.glob("**/*.yaml", recursive=True)
+          for f in sorted(set(files)):
+              with open(f, "r", encoding="utf-8") as fh:
+                  yaml.safe_load(fh)
+              print(f"OK YAML: {f}")
+          '
+
+      - name: Validate Grafana Dashboard JSON files
+        run: |
+          python3 -c '
+          import glob, json
+          for f in sorted(glob.glob("grafana/dashboards/*.json")):
+              with open(f, "r", encoding="utf-8") as fh:
+                  data = json.load(fh)
+              assert "panels" in data and len(data["panels"]) > 0, f"Missing panels in {f}"
+              print(f"OK JSON: {f} ({len(data[\"panels\"])} panels)")
+          '
+
+      - name: Validate Docker Compose schema
+        run: docker compose config -q
+
+      - name: Validate Prometheus config & SRE Alert Rules with promtool
+        run: |
+          docker run --rm --entrypoint promtool \
+            -v "${GITHUB_WORKSPACE}/prometheus:/etc/prometheus:ro" \
+            prom/prometheus:v2.55.1 \
+            check config /etc/prometheus/prometheus.yml

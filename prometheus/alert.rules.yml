@@ -1,0 +1,133 @@
+groups:
+  # ============================================================================
+  # 1. RECORDING RULES — SLI Error Ratio & Latency Histograms (99.9% SLO Target)
+  # ============================================================================
+  - name: sre_sli_recording_rules
+    interval: 30s
+    rules:
+      - record: job:http_requests_total:rate5m
+        expr: sum by (job, service_name) (rate(http_server_requests_seconds_count[5m]))
+
+      - record: job:http_requests_errors:rate5m
+        expr: |
+          sum by (job, service_name) (rate(http_server_requests_seconds_count{http_status_code=~"5.."}[5m]))
+          /
+          clamp_min(sum by (job, service_name) (rate(http_server_requests_seconds_count[5m])), 1e-9)
+
+      - record: job:http_requests_errors:rate30m
+        expr: |
+          sum by (job, service_name) (rate(http_server_requests_seconds_count{http_status_code=~"5.."}[30m]))
+          /
+          clamp_min(sum by (job, service_name) (rate(http_server_requests_seconds_count[30m])), 1e-9)
+
+      - record: job:http_requests_errors:rate1h
+        expr: |
+          sum by (job, service_name) (rate(http_server_requests_seconds_count{http_status_code=~"5.."}[1h]))
+          /
+          clamp_min(sum by (job, service_name) (rate(http_server_requests_seconds_count[1h])), 1e-9)
+
+      - record: job:http_requests_errors:rate6h
+        expr: |
+          sum by (job, service_name) (rate(http_server_requests_seconds_count{http_status_code=~"5.."}[6h]))
+          /
+          clamp_min(sum by (job, service_name) (rate(http_server_requests_seconds_count[6h])), 1e-9)
+
+      - record: job:http_request_duration_seconds:p95_5m
+        expr: |
+          histogram_quantile(0.95, sum by (le, job, service_name) (rate(http_server_requests_seconds_bucket[5m])))
+
+      - record: job:http_request_duration_seconds:p99_5m
+        expr: |
+          histogram_quantile(0.99, sum by (le, job, service_name) (rate(http_server_requests_seconds_bucket[5m])))
+
+  # ============================================================================
+  # 2. GOOGLE SRE WORKBOOK — Multi-Window, Multi-Burn-Rate Error Budget Alerts
+  # Target Availability SLO = 99.9% (Error Budget = 0.001 over 30 days)
+  # ============================================================================
+  - name: sre_error_budget_burn_rate_alerts
+    rules:
+      # Fast Burn (14.4x burn rate -> 2% of 30-day error budget consumed in 1 hour)
+      - alert: SvcErrorBudgetFastBurnPage
+        expr: |
+          (
+            job:http_requests_errors:rate1h > (14.4 * 0.001)
+            and
+            job:http_requests_errors:rate5m > (14.4 * 0.001)
+          )
+        for: 2m
+        labels:
+          severity: critical
+          slo_tier: tier-1
+          burn_type: fast
+        annotations:
+          summary: "[PAGE] Fast Error Budget Burn (14.4x) on {{ $labels.service_name }}"
+          description: "Service {{ $labels.service_name }} is burning its 99.9% monthly error budget at >14.4x rate over both 1h and 5m windows (current 5m error rate: {{ $value | humanizePercentage }}). Total budget exhaustion in <2 days."
+          runbook_url: "https://github.com/Acelera-DevOps/observability-stack#sre-error-budget-burn-rate-alerts"
+
+      # Slow Burn (6x burn rate -> 5% of 30-day error budget consumed in 6 hours)
+      - alert: SvcErrorBudgetSlowBurnTicket
+        expr: |
+          (
+            job:http_requests_errors:rate6h > (6.0 * 0.001)
+            and
+            job:http_requests_errors:rate30m > (6.0 * 0.001)
+          )
+        for: 15m
+        labels:
+          severity: warning
+          slo_tier: tier-1
+          burn_type: slow
+        annotations:
+          summary: "[TICKET] Elevated Error Budget Burn (6x) on {{ $labels.service_name }}"
+          description: "Service {{ $labels.service_name }} is burning its 99.9% error budget at >6x rate over 6h and 30m windows (current: {{ $value | humanizePercentage }})."
+          runbook_url: "https://github.com/Acelera-DevOps/observability-stack#sre-error-budget-burn-rate-alerts"
+
+  # ============================================================================
+  # 3. FOUR GOLDEN SIGNALS — Latency, Traffic, Errors & Saturation
+  # ============================================================================
+  - name: sre_four_golden_signals
+    rules:
+      # 1. LATENCY (P99 > 500ms sustained)
+      - alert: GoldenSignalHighTailLatencyP99
+        expr: job:http_request_duration_seconds:p99_5m > 0.500
+        for: 5m
+        labels:
+          severity: warning
+          golden_signal: latency
+        annotations:
+          summary: "High P99 Tail Latency (>500ms) on {{ $labels.service_name }}"
+          description: "P99 latency for {{ $labels.service_name }} is {{ $value | humanizeDuration }} over the last 5m."
+
+      # 2. TRAFFIC (Sudden traffic drop / zero throughput anomaly on active collector)
+      - alert: GoldenSignalTelemetryPipelineDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          golden_signal: traffic
+        annotations:
+          summary: "Telemetry Target {{ $labels.instance }} ({{ $labels.job }}) is DOWN"
+          description: "Prometheus failed to scrape target {{ $labels.instance }} in job {{ $labels.job }} for more than 1 minute."
+
+      # 3. ERRORS (HTTP 5xx spike > 5%)
+      - alert: GoldenSignalHighHttp5xxRate
+        expr: job:http_requests_errors:rate5m > 0.05
+        for: 3m
+        labels:
+          severity: critical
+          golden_signal: errors
+        annotations:
+          summary: "HTTP 5xx Error Rate > 5% on {{ $labels.service_name }}"
+          description: "5xx error ratio reached {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      # 4. SATURATION (OpenTelemetry Collector Memory / Queue Saturation)
+      - alert: GoldenSignalOtelCollectorQueueSaturation
+        expr: |
+          (otelcol_exporter_queue_size / clamp_min(otelcol_exporter_queue_capacity, 1)) > 0.80
+        for: 5m
+        labels:
+          severity: warning
+          golden_signal: saturation
+        annotations:
+          summary: "OpenTelemetry Collector exporter queue saturation > 80%"
+          description: "Collector exporter queue utilization is at {{ $value | humanizePercentage }}. Backpressure or downstream storage degradation may cause telemetry drops."

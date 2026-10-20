@@ -1,0 +1,45 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ["alertname", "cluster", "service_name", "golden_signal"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: "sre-default-webhook"
+  routes:
+    - matchers:
+        - severity = "critical"
+      receiver: "sre-pager-critical"
+      group_wait: 10s
+      repeat_interval: 1h
+    - matchers:
+        - severity = "warning"
+      receiver: "sre-ticket-warning"
+      group_wait: 1m
+      repeat_interval: 6h
+
+inhibit_rules:
+  - source_matchers:
+      - severity = "critical"
+      - burn_type = "fast"
+    target_matchers:
+      - severity = "warning"
+      - burn_type = "slow"
+    equal: ["service_name", "job"]
+
+receivers:
+  - name: "sre-default-webhook"
+    webhook_configs:
+      - url: "http://127.0.0.1:5001/webhook/default"
+        send_resolved: true
+
+  - name: "sre-pager-critical"
+    webhook_configs:
+      - url: "http://127.0.0.1:5001/webhook/critical-page"
+        send_resolved: true
+
+  - name: "sre-ticket-warning"
+    webhook_configs:
+      - url: "http://127.0.0.1:5001/webhook/warning-ticket"
+        send_resolved: true

@@ -1,0 +1,156 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-uid"
+      },
+      "description": "Google SRE Golden Signal 1: Latency distribution (P50, P95, P99) with OpenTelemetry Exemplars linked to Tempo.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "job:http_request_duration_seconds:p95_5m",
+          "legendFormat": "{{service_name}} - P95",
+          "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "job:http_request_duration_seconds:p99_5m",
+          "legendFormat": "{{service_name}} - P99",
+          "refId": "B"
+        }
+      ],
+      "title": "1. Latency — HTTP P95 & P99 Tail Latency (with Trace Exemplars)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-uid"
+      },
+      "description": "Google SRE Golden Signal 2: Request throughput (RPS) across services.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "job:http_requests_total:rate5m",
+          "legendFormat": "{{service_name}} RPS",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(otelcol_receiver_accepted_spans[5m]))",
+          "legendFormat": "OTel Accepted Spans/sec",
+          "refId": "B"
+        }
+      ],
+      "title": "2. Traffic — Request Rate (RPS) & OTel Span Throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-uid"
+      },
+      "description": "Google SRE Golden Signal 3: Error Ratio vs 99.9% SLO Fast/Slow Burn Thresholds.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "job:http_requests_errors:rate5m",
+          "legendFormat": "{{service_name}} 5m Error Ratio",
+          "refId": "A"
+        },
+        {
+          "expr": "job:http_requests_errors:rate1h",
+          "legendFormat": "{{service_name}} 1h Error Ratio",
+          "refId": "B"
+        }
+      ],
+      "title": "3. Errors — HTTP 5xx Error Ratio & Multi-Window Burn Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-uid"
+      },
+      "description": "Google SRE Golden Signal 4: Saturation of OpenTelemetry Collector memory and exporter queues.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "otelcol_exporter_queue_size / clamp_min(otelcol_exporter_queue_capacity, 1)",
+          "legendFormat": "Exporter Queue Utilization ({{exporter}})",
+          "refId": "A"
+        },
+        {
+          "expr": "process_resident_memory_bytes{job=\"otel-collector-internal\"} / (512 * 1024 * 1024)",
+          "legendFormat": "OTel Collector Memory vs 512MiB Limit",
+          "refId": "B"
+        }
+      ],
+      "title": "4. Saturation — OTel Collector Queue & Memory Utilization",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["sre", "golden-signals", "opentelemetry", "acelera-devops"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "title": "Acelera DevOps — SRE Four Golden Signals & Error Budget Burn",
+  "uid": "acelera-sre-golden-signals",
+  "version": 1
+}
